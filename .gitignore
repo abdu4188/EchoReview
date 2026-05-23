@@ -1,0 +1,13 @@
+# EchoReview intermediates (when test repos are nested locally)
+.echoreview/
+
+# Node
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log

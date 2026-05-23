@@ -1,0 +1,22 @@
+{
+  "name": "echoreview",
+  "owner": {
+    "name": "Abdulaziz Yesuf",
+    "url": "https://github.com/abdu4188"
+  },
+  "plugins": [
+    {
+      "name": "echoreview",
+      "source": "./plugins/echoreview",
+      "description": "Learns your team's PR review patterns from git history, then applies them alongside universal best practices when Claude reviews new PRs.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Abdulaziz Yesuf",
+        "url": "https://github.com/abdu4188"
+      },
+      "homepage": "https://github.com/abdu4188/echoreview",
+      "license": "MIT",
+      "keywords": ["pr-review", "code-review", "github", "team-patterns"]
+    }
+  ]
+}
