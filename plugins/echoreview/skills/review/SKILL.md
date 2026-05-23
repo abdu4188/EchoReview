@@ -85,13 +85,34 @@ Otherwise:
 
 ## Phase 4 — Submit
 
+### Skip gate — bail before composing a payload if nothing is actionable
+
+Before running `build-diff-map.sh`, compute `inline_findings_count`:
+
+- New findings in `$WORK_DIR/findings.json` (each one becomes an inline comment if it maps to the diff).
+- Plus, in re-review mode (`review-iteration.txt == 2`), the count of prior items classified as `NOT_FIXED` or `PARTIALLY_FIXED` — these become fresh inline comments per [`references/re-review.md`](./references/re-review.md).
+
+`FIXED` and `WONTFIX_ACKNOWLEDGED` items do **not** count — they only ever appear in the resolution table, never as inline comments.
+
+If `inline_findings_count == 0`:
+
+- Do **not** run `build-diff-map.sh`.
+- Do **not** run `submit-review.sh`.
+- Do **not** show Checkpoint 2.
+- Print the no-actionable-items status block to the Claude Code session per [`references/re-review.md`](./references/re-review.md) (different shape for first-review vs re-review). The resolution table, if any, prints to chat — not to the PR.
+- Exit cleanly. The PR stays clean.
+
+Posting a "nothing to add" PENDING review is exactly the noise the "no PR summary comment" rule in `DESIGN.md` forbids.
+
+### Otherwise — compose and submit
+
 1. Run `${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/build-diff-map.sh "$OWNER" "$REPO" "$NUMBER"` to produce `$WORK_DIR/diff-map.json`.
 2. For each finding in `$WORK_DIR/findings.json`:
    - Look up `"<file>:<line>"` in `diff-map.json`.
    - If present, record the comment with `path`, `position`, `body`.
    - If missing, demote to the review body under a section `## Additional findings (outside diff range):`.
 3. Sort comments by severity (`blocker` → `warning` → `suggestion` → `note`), then by `file:line` ascending. No count cap.
-4. If `review-iteration.txt` is `2`, prepend the resolution table from [`references/re-review.md`](./references/re-review.md) to the review body.
+4. If `review-iteration.txt` is `2`, prepend the resolution table from [`references/re-review.md`](./references/re-review.md) to the review body. (The resolution table only contextualizes re-flagged items; it never appears on its own — that case is handled by the skip gate above.)
 5. Write `$WORK_DIR/review-comments.json` (the in-diff comment array) and `$WORK_DIR/submission-payload.json` with this shape:
 
 ```json

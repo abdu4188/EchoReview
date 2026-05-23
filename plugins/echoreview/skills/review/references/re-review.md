@@ -38,6 +38,41 @@ The resolution table goes in the review **body**. Inline comments only cover new
 
 ---
 
+## No actionable items → no PENDING review
+
+When every prior item is `FIXED` or `WONTFIX_ACKNOWLEDGED` and there are no new findings, do not submit a PENDING review. The resolution table belongs in the Claude Code session as a status report, not on the PR. Posting a "nothing to add" comment is exactly the noise the no-summary rule exists to prevent.
+
+The resolution table appears in the review body **only** when there is at least one inline comment to post (a new finding, a `NOT_FIXED` re-flag, or a `PARTIALLY_FIXED` re-flag). In that case, the table contextualizes the re-flagged items.
+
+### Status block printed to the Claude Code session
+
+**Clean first review (no prior comments, zero findings):**
+
+```
+Review complete. No findings to flag — universal floor clean, reasoning pass [skipped|surfaced nothing above the ≥80 threshold].
+
+Nothing posted to the PR.
+```
+
+Pick `skipped` if Phase 3 hit a skip condition (lockfile-only, docs-only, generated, version-bump); otherwise `surfaced nothing above the ≥80 threshold`.
+
+**Clean re-review (all prior items resolved, zero new findings):**
+
+```
+Re-review complete. All prior findings resolved.
+
+| Status               | Path                          | Original comment |
+|----------------------|-------------------------------|------------------|
+| FIXED                | ...                           | ...              |
+| WONTFIX_ACKNOWLEDGED | ...                           | ...              |
+
+Nothing posted to the PR.
+```
+
+The user gets the same information they would have gotten from the PR body — just in chat, where it belongs.
+
+---
+
 ## Status definitions
 
 | Status | When to assign |
