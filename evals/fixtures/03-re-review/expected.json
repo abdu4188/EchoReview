@@ -1,0 +1,12 @@
+{
+  "name": "Re-review: 3 prior comments, one is an author reply",
+  "description": "Plumbing for re-review mode detection + reply-chain preservation in the summary.",
+  "checks": [
+    { "type": "review_iteration", "expected": "2" },
+    { "type": "summary_contains_count", "expected": "3" },
+    { "type": "summary_quotes_author", "author": "alice" },
+    { "type": "summary_quotes_author", "author": "bob" },
+    { "type": "summary_quotes_author", "author": "pr-author" },
+    { "type": "summary_preserves_reply_chain" }
+  ]
+}

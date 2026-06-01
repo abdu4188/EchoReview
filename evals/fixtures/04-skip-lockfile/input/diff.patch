@@ -1,0 +1,21 @@
+diff --git a/package-lock.json b/package-lock.json
+index aaaaaaa..bbbbbbb 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,5 +1,5 @@
+ {
+   "name": "example",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "lockfileVersion": 3
+ }
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index ccccccc..ddddddd 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -1,4 +1,4 @@
+-lockfileVersion: '6.0'
++lockfileVersion: '9.0'
+
+ settings:
+   autoInstallPeers: true

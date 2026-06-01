@@ -81,7 +81,7 @@ chore: bump version to 0.2.0
 
 - **Shell scripts:** `#!/usr/bin/env bash`, `set -euo pipefail`, `shellcheck`-clean. Quote variables. Use `mktemp` for temp paths under `/tmp/echoreview-*/`.
 - **Repo layout:** match the existing structure exactly. Don't invent new top-level directories without discussion.
-- **Skills:** every `SKILL.md` has valid frontmatter — `name`, `description`, `user_invocable: true` for user-invocable skills.
+- **Skills:** every `SKILL.md` has valid frontmatter — `name` and `description`. Skills are user-invocable by default; set `user-invocable: false` (note the hyphen) only to hide a skill from the `/` menu.
 - **References:** files under `skills/*/references/` are pure markdown — no executable side effects, no scripts.
 - **JSON:** `plugin.json`, `marketplace.json`, and eval fixtures must be valid JSON — no trailing commas, no comments.
 - **Comments:** default to none. Add one only when the *why* is non-obvious (per global rules).

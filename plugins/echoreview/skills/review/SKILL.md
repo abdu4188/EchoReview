@@ -1,6 +1,6 @@
 ---
 name: echo-review
-description: Review a GitHub PR and post a PENDING review with inline comments. Applies a universal best-practices floor and, if present in the target repo, team-mined patterns from .echoreview/patterns.md. Use when the user types /echo-review <pr> or asks you to review a PR for them.
+description: Review a GitHub PR and post a PENDING review with inline comments. Applies a universal best-practices floor and, if present in the target repo, team-mined patterns from .echoreview/patterns.md. Use when the user runs /echo-review with a PR number or URL, or asks you to review a PR for them.
 user_invocable: true
 ---
 

@@ -1,0 +1,29 @@
+[
+  {
+    "id": 9001,
+    "user": { "login": "alice", "type": "User" },
+    "path": "src/api.ts",
+    "line": 42,
+    "original_line": 42,
+    "body": "This `as any` cast hides a real null case. Please narrow before the cast.",
+    "in_reply_to_id": null
+  },
+  {
+    "id": 9002,
+    "user": { "login": "bob", "type": "User" },
+    "path": "src/api.ts",
+    "line": 88,
+    "original_line": 88,
+    "body": "Race here — the cache check and write aren't atomic across awaits.",
+    "in_reply_to_id": null
+  },
+  {
+    "id": 9003,
+    "user": { "login": "pr-author", "type": "User" },
+    "path": "src/api.ts",
+    "line": 42,
+    "original_line": 42,
+    "body": "Intentional — the surrounding code guarantees non-null. Leaving as-is.",
+    "in_reply_to_id": 9001
+  }
+]

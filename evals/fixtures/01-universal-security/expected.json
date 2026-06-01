@@ -1,0 +1,10 @@
+{
+  "name": "Universal-floor: hardcoded API key in a new TS file",
+  "description": "Plumbing preconditions for a security finding from the universal best-practices floor.",
+  "checks": [
+    { "type": "file_type", "file": "src/auth.ts", "expected": "js-ts" },
+    { "type": "file_count_with_type", "expected_type": "js-ts", "expected_count": 1 },
+    { "type": "diff_map_line", "file": "src/auth.ts", "line": 4 },
+    { "type": "review_iteration", "expected": "1" }
+  ]
+}

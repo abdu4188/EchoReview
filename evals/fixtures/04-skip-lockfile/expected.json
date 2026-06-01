@@ -1,0 +1,11 @@
+{
+  "name": "Skip-condition: lockfile-only PR",
+  "description": "Every changed file classifies as lockfile so the reasoning pass no-ops.",
+  "checks": [
+    { "type": "file_type", "file": "package-lock.json", "expected": "lockfile" },
+    { "type": "file_type", "file": "pnpm-lock.yaml", "expected": "lockfile" },
+    { "type": "file_count_with_type", "expected_type": "lockfile", "expected_count": 2 },
+    { "type": "only_file_types", "allowed": ["lockfile"] },
+    { "type": "review_iteration", "expected": "1" }
+  ]
+}
