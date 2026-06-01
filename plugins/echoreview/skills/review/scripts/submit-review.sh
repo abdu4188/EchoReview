@@ -61,7 +61,6 @@ RESPONSE="${WORK_DIR}/submission-response.json"
 gh api "repos/${OWNER}/${REPO}/pulls/${NUMBER}/reviews" \
     --method POST \
     --input "$PAYLOAD" \
-    --silent \
     > "$RESPONSE"
 
 review_id=$(jq -r '.id // empty' "$RESPONSE")
