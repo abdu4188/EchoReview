@@ -42,10 +42,10 @@ plugins/echoreview/
 | Command | Purpose |
 |---|---|
 | `/echo-review <pr-number-or-url>` | Review a PR and post a PENDING review with inline comments. |
-| `/echo-extract [--repo owner/name] [--since 6mo] [--min-freq 3] [--limit 200]` | Mine merged-PR review history into `.echoreview/patterns.md` in the current working directory. |
+| `/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500]` | Mine merged-PR review history into `.echoreview/patterns.md` in the current working directory. |
 
-`/echo-extract` flag defaults: `--since 6mo`, `--min-freq 3`,
-`--limit 200`. The `--repo` flag is optional; if omitted, the skill
+`/echo-extract` flag defaults: `--since 12mo`, `--min-freq 3`,
+`--limit 500`. The `--repo` flag is optional; if omitted, the skill
 infers the target from `git remote get-url origin` in cwd.
 
 ## Requirements

@@ -60,7 +60,7 @@ Prerequisites: `gh` (the GitHub CLI), `jq`, and Claude Code.
    checkout of the repo you want reviewed:
    ```sh
    cd ~/code/your-repo
-   /echo-extract --since 6mo
+   /echo-extract --since 12mo
    ```
    The skill walks you through a cost-estimate checkpoint, then writes
    `.echoreview/patterns.md` to the current working directory. Commit
@@ -95,7 +95,7 @@ To learn your team's patterns once before reviewing:
 ```sh
 # From a checkout of the repo to mine. --repo lets you mine an upstream
 # you don't have write access to (e.g., run from a fork's checkout).
-/echo-extract [--repo owner/name] [--since 6mo] [--min-freq 3] [--limit 200]
+/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500]
 ```
 
 ## Privacy

@@ -13,17 +13,17 @@ This skill walks five phases with two user checkpoints (the cost-estimate check 
 ## Inputs
 
 ```
-/echo-extract [--repo owner/name] [--since 6mo] [--min-freq 3] [--limit 200]
+/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500]
 ```
 
 - `--repo owner/name` — target repo to mine. If absent, derive from `git remote get-url origin` in the current working directory. The canonical case is running from a fork's checkout to mine the upstream.
-- `--since` — time window, format `Nd|Nw|Nmo|Ny`. Default `6mo`.
+- `--since` — time window, format `Nd|Nw|Nmo|Ny`. Default `12mo`.
 - `--min-freq` — minimum cluster frequency to emit a rule. Default `3`.
-- `--limit` — maximum PRs to fetch. Default `200` (hard cap per DESIGN.md).
+- `--limit` — maximum PRs to fetch. Default `500`.
 
 ## Phase 0 — Setup (silent, do this before Phase 1)
 
-1. Parse flags. Apply defaults: `--since 6mo`, `--min-freq 3`, `--limit 200`.
+1. Parse flags. Apply defaults: `--since 12mo`, `--min-freq 3`, `--limit 500`.
 2. Verify `gh auth status` succeeds. If not, instruct the user to run `gh auth login` and stop.
 3. Resolve `TARGET_REPO`:
    - If `--repo` was passed, validate it matches `owner/name` and use it.

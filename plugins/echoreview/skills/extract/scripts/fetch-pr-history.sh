@@ -8,7 +8,7 @@
 # Positional args
 #   TARGET_REPO    owner/name (e.g. vueuse/vueuse)
 #   SINCE_WINDOW   Nd|Nw|Nmo|Ny (e.g. 6mo, 30d, 1y)
-#   MAX_PRS        optional, default 200 (hard cap per DESIGN.md)
+#   MAX_PRS        optional, default 500
 #
 # Environment
 #   WORK_DIR                 default /tmp/echoreview-extract
@@ -23,7 +23,7 @@ fi
 
 TARGET_REPO="$1"
 SINCE_WINDOW="$2"
-MAX_PRS="${3:-200}"
+MAX_PRS="${3:-500}"
 WORK_DIR="${WORK_DIR:-/tmp/echoreview-extract}"
 ESTIMATE_ONLY="${ECHOREVIEW_ESTIMATE_ONLY:-0}"
 
