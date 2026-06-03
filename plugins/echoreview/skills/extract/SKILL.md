@@ -52,6 +52,23 @@ Mining <target_repo> since <since>.
   Projected comments: ~<projected_total_comments>
 ```
 
+### Truncation notice (only if estimate.json `truncation_detected` is true)
+
+If `truncation_detected` is `true`, `--limit` capped the fetch shorter than the
+requested `--since` window. Print, **before** the cost-guardrail checkpoint:
+
+```
+⚠ --limit <max_prs> truncated your --since <since_window> request.
+  Actual window mined: <earliest_merged> to <latest_merged> (~<window_weeks> weeks).
+  <total_in_window> merged PRs exist in the requested <since_window> range.
+  To mine the full window, re-run with --limit <suggested_limit>.
+```
+
+`<earliest_merged>` and `<latest_merged>` are ISO timestamps from `estimate.json`;
+render them as `YYYY-MM-DD` (slice the date prefix). All other placeholders come
+verbatim from `estimate.json`. Always emit the notice when `truncation_detected`
+is true — never suppress it, regardless of the cost-guardrail decision below.
+
 ### Checkpoint 1 — cost guardrail (only if projected > 2000)
 
 If `projected_total_comments > 2000`, print:

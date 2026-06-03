@@ -105,11 +105,65 @@ estimate_costs() {
     local pr_count
     pr_count=$(jq 'length' "$pr_list")
 
+    # Window coverage: detect when --limit truncated the requested --since
+    # window. Compare the date span actually returned against the requested
+    # threshold; if the returned PR count saturates MAX_PRS, run a count-only
+    # query to discover how many PRs exist in the full window.
+    local earliest_merged="" latest_merged="" weeks=0
+    if (( pr_count > 0 )); then
+        earliest_merged=$(jq -r '[.[].mergedAt] | min' "$pr_list")
+        latest_merged=$(jq -r '[.[].mergedAt] | max' "$pr_list")
+        weeks=$(jq -n --arg e "$earliest_merged" --arg l "$latest_merged" \
+            '(($l | fromdateiso8601) - ($e | fromdateiso8601)) / 86400 / 7 | floor')
+    fi
+
+    local total_in_window
+    if (( pr_count > 0 )) && (( pr_count >= MAX_PRS )); then
+        total_in_window=$(gh pr list \
+            --repo "$TARGET_REPO" \
+            --state merged \
+            --search "merged:>=${since_date}" \
+            --json number \
+            --limit 99999 \
+            2>/dev/null | jq 'length' 2>/dev/null) || total_in_window="$pr_count"
+        [[ -z "$total_in_window" ]] && total_in_window="$pr_count"
+    else
+        total_in_window="$pr_count"
+    fi
+
+    local truncated suggested
+    if (( total_in_window > MAX_PRS )); then
+        truncated="true"
+        if   (( total_in_window <= 500 )); then suggested=500
+        elif (( total_in_window <= 1000 )); then suggested=1000
+        elif (( total_in_window <= 2000 )); then suggested=2000
+        else suggested=$(( ((total_in_window + 999) / 1000) * 1000 ))
+        fi
+    else
+        truncated="false"
+        suggested="$MAX_PRS"
+    fi
+
     if (( pr_count == 0 )); then
         jq -n \
             --arg target "$TARGET_REPO" \
             --arg since "$since_date" \
-            '{target_repo: $target, since: $since, pr_count: 0, sampled_prs: [], sampled_avg_comments: 0, projected_total_comments: 0}' \
+            --arg since_window "$SINCE_WINDOW" \
+            --argjson max_prs "$MAX_PRS" \
+            '{target_repo: $target,
+              since: $since,
+              since_window: $since_window,
+              max_prs: $max_prs,
+              pr_count: 0,
+              sampled_prs: [],
+              sampled_avg_comments: 0,
+              projected_total_comments: 0,
+              earliest_merged: null,
+              latest_merged: null,
+              window_weeks: 0,
+              total_in_window: 0,
+              truncation_detected: false,
+              suggested_limit: $max_prs}' \
             > "$out"
         return 0
     fi
@@ -146,16 +200,32 @@ estimate_costs() {
     jq -n \
         --arg target "$TARGET_REPO" \
         --arg since "$since_date" \
+        --arg since_window "$SINCE_WINDOW" \
+        --argjson max_prs "$MAX_PRS" \
         --argjson pr_count "$pr_count" \
         --argjson sampled "$sampled_json" \
         --argjson avg "$avg" \
         --argjson projected "$projected" \
+        --arg earliest_merged "$earliest_merged" \
+        --arg latest_merged "$latest_merged" \
+        --argjson weeks "$weeks" \
+        --argjson total_in_window "$total_in_window" \
+        --argjson truncated "$truncated" \
+        --argjson suggested "$suggested" \
         '{target_repo: $target,
           since: $since,
+          since_window: $since_window,
+          max_prs: $max_prs,
           pr_count: $pr_count,
           sampled_prs: $sampled,
           sampled_avg_comments: $avg,
-          projected_total_comments: $projected}' \
+          projected_total_comments: $projected,
+          earliest_merged: $earliest_merged,
+          latest_merged: $latest_merged,
+          window_weeks: $weeks,
+          total_in_window: $total_in_window,
+          truncation_detected: $truncated,
+          suggested_limit: $suggested}' \
         > "$out"
 }
 
