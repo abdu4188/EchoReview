@@ -1,6 +1,6 @@
 {
   "name": "echoreview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Learns your team's PR review patterns from git history, then applies them alongside universal best practices when Claude reviews new PRs.",
   "author": {
     "name": "Abdulaziz Yesuf",
