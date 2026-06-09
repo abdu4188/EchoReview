@@ -13,17 +13,22 @@ This skill walks five phases with two user checkpoints (the cost-estimate check 
 ## Inputs
 
 ```
-/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500]
+/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500] [--coverage balanced]
 ```
 
 - `--repo owner/name` — target repo to mine. If absent, derive from `git remote get-url origin` in the current working directory. The canonical case is running from a fork's checkout to mine the upstream.
 - `--since` — time window, format `Nd|Nw|Nmo|Ny`. Default `12mo`.
 - `--min-freq` — minimum cluster frequency to emit a rule. Default `3`.
 - `--limit` — maximum PRs to fetch. Default `500`.
+- `--coverage recent|balanced|full` — how `--limit` samples the `--since` window when the window holds more PRs than `--limit`. Default `balanced`.
+  - `recent` — newest `--limit` PRs only. Densest signal for current norms; ignores older history.
+  - `balanced` — most-recent contiguous block plus a slice sampled across the rest of the window.
+  - `full` — even coverage across the whole window.
+  When the window fits within `--limit` (no truncation), all three behave identically — every PR is mined.
 
 ## Phase 0 — Setup (silent, do this before Phase 1)
 
-1. Parse flags. Apply defaults: `--since 12mo`, `--min-freq 3`, `--limit 500`.
+1. Parse flags. Apply defaults: `--since 12mo`, `--min-freq 3`, `--limit 500`, `--coverage balanced`. Remember whether `--coverage` was **explicitly passed** — the truncation prompt in Phase 1 only fires when it was *not*.
 2. Verify `gh auth status` succeeds. If not, instruct the user to run `gh auth login` and stop.
 3. Resolve `TARGET_REPO`:
    - If `--repo` was passed, validate it matches `owner/name` and use it.
@@ -52,22 +57,34 @@ Mining <target_repo> since <since>.
   Projected comments: ~<projected_total_comments>
 ```
 
-### Truncation notice (only if estimate.json `truncation_detected` is true)
+### Coverage decision (only if estimate.json `truncation_detected` is true)
 
-If `truncation_detected` is `true`, `--limit` capped the fetch shorter than the
-requested `--since` window. Print, **before** the cost-guardrail checkpoint:
+If `truncation_detected` is `true`, `--limit` is smaller than the number of merged
+PRs in the requested `--since` window, so the run cannot cover the whole window —
+it can only choose *how* to sample it. Decide the coverage mode **before** the
+cost-guardrail checkpoint:
 
-```
-⚠ --limit <max_prs> truncated your --since <since_window> request.
-  Actual window mined: <earliest_merged> to <latest_merged> (~<window_weeks> weeks).
-  <total_in_window> merged PRs exist in the requested <since_window> range.
-  To mine the full window, re-run with --limit <suggested_limit>.
-```
+- **`--coverage` was explicitly passed** → honor it. Print one line, no prompt:
+  ```
+  --limit <max_prs> can't cover --since <since_window> (~<total_in_window> PRs in range). Sampling with <coverage> coverage.
+  ```
+- **`--coverage` was not passed** → print this numbered prompt and read a typed
+  choice (this is a terminal agent — no GUI). Default to `2` on empty input:
+  ```
+  --limit <max_prs> can't cover --since <since_window> (~<total_in_window> PRs in range). How should I sample?
+    1) recent   — last ~<window_weeks> weeks only, densest signal for current norms
+    2) balanced — recent + a slice across the full window (default)
+    3) full     — even coverage across the whole window
+  Choose [2]:
+  ```
+  Map `1`→`recent`, `2`→`balanced`, `3`→`full`. Set `COVERAGE` to the chosen mode.
 
-`<earliest_merged>` and `<latest_merged>` are ISO timestamps from `estimate.json`;
-render them as `YYYY-MM-DD` (slice the date prefix). All other placeholders come
-verbatim from `estimate.json`. Always emit the notice when `truncation_detected`
-is true — never suppress it, regardless of the cost-guardrail decision below.
+`<total_in_window>` and `<window_weeks>` come verbatim from `estimate.json`
+(`window_weeks` is the span of the newest-`--limit` slice — i.e. the "last ~W weeks"
+that `recent` would mine). Capped at 1000 by GitHub's search API.
+
+If `truncation_detected` is `false`, **skip this step entirely** — every preset
+mines the same full window, so there is nothing to choose.
 
 ### Checkpoint 1 — cost guardrail (only if projected > 2000)
 
@@ -85,14 +102,18 @@ If `pr_count == 0`, stop and tell the user the window is empty — suggest widen
 
 ### Step 1b — Full fetch + filter
 
-Run the same script without the env flag:
+Run the same script without the env flag, passing the resolved coverage mode:
 
 ```
 ${CLAUDE_PLUGIN_ROOT}/skills/extract/scripts/fetch-pr-history.sh \
-    "$TARGET_REPO" "$SINCE" "$LIMIT"
+    "$TARGET_REPO" "$SINCE" "$LIMIT" "$COVERAGE"
 ```
 
-This re-lists PRs, fetches `/comments` + `/reviews` for each PR (`--paginate`, normalized with `jq -s 'if length == 0 then [] else add end'`), writes `raw-comments.jsonl`, then filters to `${WORK_DIR}/comments.jsonl`.
+This lists the **full** `--since` window (cheap: numbers + merge dates, up to
+GitHub's 1000-result cap → `window-list.json`), selects the PRs to mine per
+`$COVERAGE` up to `$LIMIT` (→ `pr-list.json`), records the realized window of that
+mined set (→ `manifest.json`), then fetches `/comments` + `/reviews` for each
+selected PR (`--paginate`, normalized with `jq -s 'if length == 0 then [] else add end'`), writes `raw-comments.jsonl`, and filters to `${WORK_DIR}/comments.jsonl`.
 
 Filter rules applied by the script:
 - Drop bot accounts (`user.type == "Bot"` at fetch time; login matches `\[bot\]$` or `-bot$` at filter time).
@@ -183,16 +204,44 @@ If `./.echoreview/patterns.md` does not exist, skip the prompt.
 
 #### File header (top of patterns.md)
 
+The header separates what was **requested** from what was actually **mined**, so
+the frequencies below are never read as covering more than they do. Pull the
+realized window from `${WORK_DIR}/manifest.json` (`earliest_merged`,
+`latest_merged`, `window_weeks`, `coverage_mode`, `pr_count`) and the truncation
+facts from `${WORK_DIR}/estimate.json` (`truncation_detected`, `total_in_window`).
+Render `earliest_merged` / `latest_merged` as `YYYY-MM-DD` (slice the date prefix).
+
 ```
 # EchoReview patterns
 
 Source: <target_repo>
 Generated: <YYYY-MM-DD>
-Flags: --since <since>, --min-freq <min_freq>, --limit <limit>
-Mined: <pr_count> PRs, <comment_count> comments, <rule_count> rules
+Requested:    --since <since>, --min-freq <min_freq>, --limit <limit>, --coverage <coverage>
+Window mined: <earliest> → <latest> (~<window_weeks> weeks)
+Mined:        <pr_count> PRs, <comment_count> comments, <rule_count> rules
+<caveat line>
 
 ---
 ```
+
+The `<caveat line>` depends on coverage mode and whether the window was truncated:
+
+- **not truncated** (`truncation_detected` is `false`) → omit the line entirely.
+  The full `--since` window was mined; there is nothing to caveat.
+- **truncated + `recent`** →
+  ```
+  Truncation:   --limit capped the window to ~<window_weeks> weeks; ~<total_in_window> PRs exist in --since range; frequencies reflect only that window.
+  ```
+- **truncated + `balanced` or `full`** →
+  ```
+  Sampling:     mined <pr_count> of ~<total_in_window> PRs sampled across the full window (<coverage> coverage); frequencies are raw counts over a non-uniform sample and are approximate.
+  ```
+
+> **Known limitation.** `freq` is a raw count, not a rate. Under `balanced`, only
+> ~30% of `--limit` lands on the historical tail, so a rare-but-evergreen norm that
+> appears steadily across the full window may still fall below `--min-freq` and get
+> dropped. This is accepted, not bugged — re-run with `--coverage full` for flatter
+> historical coverage, or lower `--min-freq`, if the tail matters to you.
 
 #### Per-rule schema (exactly per DESIGN.md "Patterns schema")
 
@@ -231,7 +280,7 @@ Do not write a celebration, a roadmap, or a summary of what the rules mean.
 
 ## Working directory
 
-All intermediates (`pr-list.json`, `estimate.json`, `raw-comments.jsonl`, `comments.jsonl`) live in `/tmp/echoreview-extract/`. The patterns file goes to **the user's cwd**, never `/tmp/`. The user owns cleanup of both — don't auto-delete.
+All intermediates (`pr-list.json`, `window-list.json`, `estimate.json`, `manifest.json`, `raw-comments.jsonl`, `comments.jsonl`) live in `/tmp/echoreview-extract/`. The patterns file goes to **the user's cwd**, never `/tmp/`. The user owns cleanup of both — don't auto-delete.
 
 ## What this skill must not do
 
