@@ -65,6 +65,7 @@ Supported check types:
 | `summary_quotes_author` | `previous-comments.md` mentions `@author`. |
 | `summary_preserves_reply_chain` | at least one `in_reply_to_id: <n>` record present. |
 | `patterns_readable` | sibling `patterns.md` has ≥ `expected_rule_count` rules, each with ≥ 1 verbatim quote. |
+| `patterns_header` | sibling `patterns.md` contains every header token in `requires` (catches a header-field rename, e.g. `Requested:`/`Window mined:`). |
 
 Comparisons are by substance, not byte-for-byte. The Claude-driven
 parts (comment voice, severity rationale text) are intentionally not

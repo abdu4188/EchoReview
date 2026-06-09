@@ -95,7 +95,9 @@ To learn your team's patterns once before reviewing:
 ```sh
 # From a checkout of the repo to mine. --repo lets you mine an upstream
 # you don't have write access to (e.g., run from a fork's checkout).
-/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500]
+# --coverage (recent|balanced|full) chooses how --limit samples the
+# --since window when the window holds more PRs than --limit.
+/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500] [--coverage balanced]
 ```
 
 ## Privacy

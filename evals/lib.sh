@@ -217,6 +217,32 @@ check_patterns_readable() {
     return 0
 }
 
+# check_patterns_header — assert ./patterns.md carries every required header
+# token (e.g. "Requested:", "Window mined:", "--coverage", "weeks)"). Guards
+# against a silent header-field rename, which the rule-body checks above miss.
+check_patterns_header() {
+    local check_json="$1"
+    local patterns_file requires missing token
+    patterns_file="${WORK_DIR}/patterns.md"
+    if [[ ! -r "$patterns_file" ]]; then
+        fail_check "patterns_header: patterns.md missing in fixture"
+        return 1
+    fi
+    requires=$(jq -r '.requires[]' <<<"$check_json")
+    missing=""
+    while IFS= read -r token; do
+        [[ -z "$token" ]] && continue
+        if ! grep -qF -- "$token" "$patterns_file"; then
+            missing+="${token}; "
+        fi
+    done <<<"$requires"
+    if [[ -n "$missing" ]]; then
+        fail_check "patterns_header: missing header token(s): ${missing}"
+        return 1
+    fi
+    return 0
+}
+
 # dispatch_check CHECK_JSON — route to the right check function by .type.
 dispatch_check() {
     local check_json="$1"
@@ -232,6 +258,7 @@ dispatch_check() {
         summary_quotes_author)           check_summary_quotes_author "$check_json" ;;
         summary_preserves_reply_chain)   check_summary_preserves_reply_chain ;;
         patterns_readable)               check_patterns_readable "$check_json" ;;
+        patterns_header)                 check_patterns_header "$check_json" ;;
         *)
             fail_check "unknown check type: ${check_type}"
             return 1

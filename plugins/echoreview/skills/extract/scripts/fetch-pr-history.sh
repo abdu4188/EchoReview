@@ -3,12 +3,18 @@
 # repo, filter to substantive comments, and write a JSONL file ready
 # for semantic clustering by the echo-extract skill.
 #
-# Usage: fetch-pr-history.sh TARGET_REPO SINCE_WINDOW [MAX_PRS]
+# Usage: fetch-pr-history.sh TARGET_REPO SINCE_WINDOW [MAX_PRS] [COVERAGE]
 #
 # Positional args
 #   TARGET_REPO    owner/name (e.g. vueuse/vueuse)
 #   SINCE_WINDOW   Nd|Nw|Nmo|Ny (e.g. 6mo, 30d, 1y)
 #   MAX_PRS        optional, default 500
+#   COVERAGE       optional, recent|balanced|full, default balanced. Controls
+#                  which PRs in the window get mined when MAX_PRS < window size:
+#                    recent   — newest MAX_PRS only (legacy behavior)
+#                    balanced — newest block + a slice across the full window
+#                    full     — even coverage across the whole window
+#                  Ignored in estimate-only mode.
 #
 # Environment
 #   WORK_DIR                 default /tmp/echoreview-extract
@@ -16,16 +22,30 @@
 
 set -euo pipefail
 
-if [[ $# -lt 2 || $# -gt 3 ]]; then
-    echo "usage: fetch-pr-history.sh TARGET_REPO SINCE_WINDOW [MAX_PRS]" >&2
+if [[ $# -lt 2 || $# -gt 4 ]]; then
+    echo "usage: fetch-pr-history.sh TARGET_REPO SINCE_WINDOW [MAX_PRS] [COVERAGE]" >&2
     exit 2
 fi
 
 TARGET_REPO="$1"
 SINCE_WINDOW="$2"
 MAX_PRS="${3:-500}"
+COVERAGE="${4:-balanced}"
 WORK_DIR="${WORK_DIR:-/tmp/echoreview-extract}"
 ESTIMATE_ONLY="${ECHOREVIEW_ESTIMATE_ONLY:-0}"
+
+# GitHub's search API caps any merged-PR listing at 1000 results, so the full
+# window we can ever see is bounded by this. balanced reserves this fraction of
+# --limit for the newest contiguous block; the rest samples the older window.
+WINDOW_CAP=1000
+BALANCED_RECENT_FRAC=0.70
+
+# Shared span-in-weeks formula. Defined once and prepended to every jq program
+# that needs it (write_manifest, estimate_costs) so the decision prompt and the
+# patterns.md header can never report different spans for the same run. Returns
+# 0 when either endpoint is null. The $-tokens are jq variables, not shell.
+# shellcheck disable=SC2016
+JQ_SPAN_WEEKS='def span_weeks($earliest; $latest): if ($earliest == null) or ($latest == null) then 0 else ((($latest | fromdateiso8601) - ($earliest | fromdateiso8601)) / 86400 / 7) | floor end;'
 
 if [[ ! "$TARGET_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
     echo "error: TARGET_REPO must be 'owner/name', got '${TARGET_REPO}'" >&2
@@ -34,6 +54,11 @@ fi
 
 if [[ ! "$MAX_PRS" =~ ^[0-9]+$ ]] || (( MAX_PRS < 1 )); then
     echo "error: MAX_PRS must be a positive integer, got '${MAX_PRS}'" >&2
+    exit 2
+fi
+
+if [[ ! "$COVERAGE" =~ ^(recent|balanced|full)$ ]]; then
+    echo "error: COVERAGE must be recent|balanced|full, got '${COVERAGE}'" >&2
     exit 2
 fi
 
@@ -73,7 +98,9 @@ resolve_since_date() {
     fi
 }
 
-# List merged PRs in the window. Writes pr-list.json. Always fresh.
+# List merged PRs in the window, newest first up to $max, in a single cheap page.
+# Writes pr-list.json. Always fresh. Used by the estimate path and by recent-mode
+# full fetch — recent never needs the whole window, so it skips list_window.
 list_prs() {
     local target="$1" since_date="$2" max="$3"
     gh pr list \
@@ -83,6 +110,67 @@ list_prs() {
         --limit "$max" \
         --json number,title,author,mergedAt \
         > "${WORK_DIR}/pr-list.json"
+}
+
+# List ALL merged PRs in the window (numbers+dates are cheap), up to the
+# GitHub search cap, so select_prs can sample across the full span instead of
+# silently collapsing --since into the newest few weeks. Writes window-list.json.
+list_window() {
+    local target="$1" since_date="$2"
+    gh pr list \
+        --repo "$target" \
+        --state merged \
+        --search "merged:>=${since_date}" \
+        --limit "$WINDOW_CAP" \
+        --json number,title,author,mergedAt \
+        > "${WORK_DIR}/window-list.json"
+}
+
+# Pick the subset of window-list.json to actually mine, up to MAX_PRS, per the
+# coverage mode. Writes pr-list.json (the mined set). Selection lives in jq to
+# avoid fragile bash float math; pick_even spreads $k indices evenly across an
+# array (both endpoints inclusive) with no duplicates for $k <= length.
+select_prs() {
+    local mode="$1" limit="$2"
+    jq --arg mode "$mode" --argjson limit "$limit" --argjson frac "$BALANCED_RECENT_FRAC" '
+        def pick_even($arr; $k):
+          ($arr | length) as $n |
+          if   $k <= 0  then []
+          elif $k >= $n then $arr
+          elif $k == 1  then [$arr[0]]
+          else [ range(0; $k) | $arr[ ((. * ($n - 1) / ($k - 1)) | round) ] ]
+          end;
+        ( sort_by(.mergedAt) | reverse ) as $sorted     # newest first
+        | ($sorted | length) as $n
+        | if   $mode == "recent" then $sorted[0:$limit]
+          elif $mode == "full"   then pick_even($sorted; $limit)
+          else
+            if $n <= $limit then $sorted
+            else
+              (($limit * $frac) | floor) as $recent_n
+              | ($sorted[0:$recent_n]) + pick_even($sorted[$recent_n:]; ($limit - $recent_n))
+            end
+          end
+    ' "${WORK_DIR}/window-list.json" > "${WORK_DIR}/pr-list.json"
+}
+
+# Record the realized window of the SET ACTUALLY MINED (not the raw newest-N
+# list). Derived from pr-list.json — no extra API calls. Writes manifest.json.
+write_manifest() {
+    local mode="$1"
+    local pr_list="${WORK_DIR}/pr-list.json"
+    jq --arg mode "$mode" --arg since_window "$SINCE_WINDOW" "${JQ_SPAN_WEEKS}"'
+        . as $p
+        | ($p | length) as $count
+        | (if $count > 0 then ($p | map(.mergedAt) | min) else null end) as $earliest
+        | (if $count > 0 then ($p | map(.mergedAt) | max) else null end) as $latest
+        | { pr_count: $count,
+            coverage_mode: $mode,
+            since_window: $since_window,
+            earliest_merged: $earliest,
+            latest_merged: $latest,
+            window_weeks: span_weeks($earliest; $latest) }
+    ' "$pr_list" > "${WORK_DIR}/manifest.json"
 }
 
 # Count review-comments + reviews for one PR; tolerant of API errors.
@@ -114,7 +202,7 @@ estimate_costs() {
         earliest_merged=$(jq -r '[.[].mergedAt] | min' "$pr_list")
         latest_merged=$(jq -r '[.[].mergedAt] | max' "$pr_list")
         weeks=$(jq -n --arg e "$earliest_merged" --arg l "$latest_merged" \
-            '(($l | fromdateiso8601) - ($e | fromdateiso8601)) / 86400 / 7 | floor')
+            "${JQ_SPAN_WEEKS}"'span_weeks($e; $l)')
     fi
 
     local total_in_window
@@ -366,13 +454,24 @@ filter_comments() {
 
 SINCE_DATE=$(resolve_since_date "$SINCE_WINDOW")
 
-list_prs "$TARGET_REPO" "$SINCE_DATE" "$MAX_PRS"
-
 if [[ "$ESTIMATE_ONLY" == "1" ]]; then
+    list_prs "$TARGET_REPO" "$SINCE_DATE" "$MAX_PRS"
     estimate_costs "$SINCE_DATE"
     echo "wrote: ${WORK_DIR}/estimate.json"
     exit 0
 fi
+
+# Full fetch. recent only needs the newest MAX_PRS, so it takes the cheap
+# single-page list_prs path (no over-fetch-then-discard). balanced/full need the
+# whole window listed (up to GitHub's search cap) so select_prs can sample across
+# the full span before paying for the per-PR comment/review fetches.
+if [[ "$COVERAGE" == "recent" ]]; then
+    list_prs "$TARGET_REPO" "$SINCE_DATE" "$MAX_PRS"
+else
+    list_window "$TARGET_REPO" "$SINCE_DATE"
+    select_prs "$COVERAGE" "$MAX_PRS"
+fi
+write_manifest "$COVERAGE"
 
 fetch_all_comments
 filter_comments
