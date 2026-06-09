@@ -13,6 +13,9 @@ patterns-driven layer:
 - The fixture's synthetic `patterns.md` parses to a schema-valid rule
   with at least one verbatim evidence quote (the voice signal the
   review skill mirrors when posting an inline comment).
+- The `patterns.md` header carries the current fields
+  (`Requested:` / `Window mined:` / `--coverage` / `~N weeks)`), so a
+  silent header-field rename in the extract skill gets caught here.
 
 Voice matching itself runs in Claude — see `evals/README.md` for the
 manual end-to-end check.

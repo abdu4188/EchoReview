@@ -6,6 +6,7 @@
     { "type": "file_count_with_type", "expected_type": "test", "expected_count": 1 },
     { "type": "diff_map_line", "file": "packages/core/useFoo/index.test.ts", "line": 7 },
     { "type": "review_iteration", "expected": "1" },
-    { "type": "patterns_readable", "expected_rule_count": 1 }
+    { "type": "patterns_readable", "expected_rule_count": 1 },
+    { "type": "patterns_header", "requires": ["Requested:", "Window mined:", "--coverage", "weeks)"] }
   ]
 }

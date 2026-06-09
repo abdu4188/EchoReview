@@ -23,7 +23,7 @@ This skill walks five phases with two user checkpoints (the cost-estimate check 
 - `--coverage recent|balanced|full` — how `--limit` samples the `--since` window when the window holds more PRs than `--limit`. Default `balanced`.
   - `recent` — newest `--limit` PRs only. Densest signal for current norms; ignores older history.
   - `balanced` — most-recent contiguous block plus a slice sampled across the rest of the window.
-  - `full` — even coverage across the whole window.
+  - `full` — even coverage across the mined window. Note GitHub's search API caps any listing at 1000 results, so when a window holds more than 1000 merged PRs even `full` cannot reach past that cap.
   When the window fits within `--limit` (no truncation), all three behave identically — every PR is mined.
 
 ## Phase 0 — Setup (silent, do this before Phase 1)
@@ -72,16 +72,28 @@ cost-guardrail checkpoint:
   choice (this is a terminal agent — no GUI). Default to `2` on empty input:
   ```
   --limit <max_prs> can't cover --since <since_window> (~<total_in_window> PRs in range). How should I sample?
-    1) recent   — last ~<window_weeks> weeks only, densest signal for current norms
+    1) recent   — newest ~<window_weeks> weeks only (<earliest> → <latest>), densest signal for current norms
     2) balanced — recent + a slice across the full window (default)
-    3) full     — even coverage across the whole window
+    3) full     — even coverage across the full window (up to GitHub's 1000-PR cap)
   Choose [2]:
   ```
   Map `1`→`recent`, `2`→`balanced`, `3`→`full`. Set `COVERAGE` to the chosen mode.
 
-`<total_in_window>` and `<window_weeks>` come verbatim from `estimate.json`
-(`window_weeks` is the span of the newest-`--limit` slice — i.e. the "last ~W weeks"
-that `recent` would mine). Capped at 1000 by GitHub's search API.
+**Escape hatch.** When `estimate.json` `suggested_limit` is `≤ 1000` **and**
+`total_in_window < 1000` — i.e. the whole window fits under GitHub's search cap and a
+higher `--limit` would give *genuine* full coverage — append this line to the prompt
+(just above `Choose [2]:`) and to the explicit-coverage one-liner:
+```
+  Or re-run with --limit <suggested_limit> to cover the whole window.
+```
+If `total_in_window` has reached the 1000 cap, omit it — no `--limit` can exceed the
+cap, so full coverage is genuinely unavailable.
+
+`<total_in_window>`, `<window_weeks>`, `<earliest>`, `<latest>`, and `<suggested_limit>`
+come verbatim from `estimate.json` (render `earliest_merged` / `latest_merged` as
+`YYYY-MM-DD` — slice the date prefix). `window_weeks` is the span of the
+newest-`--limit` slice — i.e. the "last ~W weeks" (`<earliest>` → `<latest>`) that
+`recent` would mine. `total_in_window` is itself capped at 1000 by GitHub's search API.
 
 If `truncation_detected` is `false`, **skip this step entirely** — every preset
 mines the same full window, so there is nothing to choose.
@@ -208,7 +220,8 @@ The header separates what was **requested** from what was actually **mined**, so
 the frequencies below are never read as covering more than they do. Pull the
 realized window from `${WORK_DIR}/manifest.json` (`earliest_merged`,
 `latest_merged`, `window_weeks`, `coverage_mode`, `pr_count`) and the truncation
-facts from `${WORK_DIR}/estimate.json` (`truncation_detected`, `total_in_window`).
+facts from `${WORK_DIR}/estimate.json` (`truncation_detected`, `total_in_window`,
+`suggested_limit`).
 Render `earliest_merged` / `latest_merged` as `YYYY-MM-DD` (slice the date prefix).
 
 ```
@@ -224,7 +237,10 @@ Mined:        <pr_count> PRs, <comment_count> comments, <rule_count> rules
 ---
 ```
 
-The `<caveat line>` depends on coverage mode and whether the window was truncated:
+The `<caveat line>` depends on coverage mode and whether the window was truncated.
+`<total_in_window>` is itself capped at GitHub's 1000-result search limit, so when it
+reads `1000` treat it as a floor: render the count `≥1000` and drop the leading `~`
+(not an exact `~1000`) — no preset can mine past that cap.
 
 - **not truncated** (`truncation_detected` is `false`) → omit the line entirely.
   The full `--since` window was mined; there is nothing to caveat.
@@ -234,14 +250,24 @@ The `<caveat line>` depends on coverage mode and whether the window was truncate
   ```
 - **truncated + `balanced` or `full`** →
   ```
-  Sampling:     mined <pr_count> of ~<total_in_window> PRs sampled across the full window (<coverage> coverage); frequencies are raw counts over a non-uniform sample and are approximate.
+  Sampling:     mined <pr_count> of ~<total_in_window> PRs sampled across the mined window (<coverage> coverage, ≤1000 PRs — GitHub's search cap); frequencies are raw counts over a non-uniform sample and are approximate.
   ```
 
-> **Known limitation.** `freq` is a raw count, not a rate. Under `balanced`, only
-> ~30% of `--limit` lands on the historical tail, so a rare-but-evergreen norm that
-> appears steadily across the full window may still fall below `--min-freq` and get
-> dropped. This is accepted, not bugged — re-run with `--coverage full` for flatter
-> historical coverage, or lower `--min-freq`, if the tail matters to you.
+In **either** truncated case, if `suggested_limit` is `≤ 1000` and `total_in_window <
+1000` (the whole window fits under the cap), append a second caveat line offering
+genuine full coverage:
+```
+              Re-run with --limit <suggested_limit> to cover the whole window.
+```
+If `total_in_window` has reached the 1000 cap, omit it — raising `--limit` cannot
+exceed GitHub's search limit, so full coverage is not available.
+
+> **Known limitation.** `freq` is a raw count, not a rate. Under `balanced`, most of
+> `--limit` is reserved for the recent block and only the remainder lands on the
+> historical tail, so a rare-but-evergreen norm that appears steadily across the full
+> window may still fall below `--min-freq` and get dropped. This is accepted, not
+> bugged — re-run with `--coverage full` for flatter historical coverage, or lower
+> `--min-freq`, if the tail matters to you.
 
 #### Per-rule schema (exactly per DESIGN.md "Patterns schema")
 

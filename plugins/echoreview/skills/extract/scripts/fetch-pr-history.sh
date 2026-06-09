@@ -40,6 +40,13 @@ ESTIMATE_ONLY="${ECHOREVIEW_ESTIMATE_ONLY:-0}"
 WINDOW_CAP=1000
 BALANCED_RECENT_FRAC=0.70
 
+# Shared span-in-weeks formula. Defined once and prepended to every jq program
+# that needs it (write_manifest, estimate_costs) so the decision prompt and the
+# patterns.md header can never report different spans for the same run. Returns
+# 0 when either endpoint is null. The $-tokens are jq variables, not shell.
+# shellcheck disable=SC2016
+JQ_SPAN_WEEKS='def span_weeks($earliest; $latest): if ($earliest == null) or ($latest == null) then 0 else ((($latest | fromdateiso8601) - ($earliest | fromdateiso8601)) / 86400 / 7) | floor end;'
+
 if [[ ! "$TARGET_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
     echo "error: TARGET_REPO must be 'owner/name', got '${TARGET_REPO}'" >&2
     exit 2
@@ -91,8 +98,9 @@ resolve_since_date() {
     fi
 }
 
-# List merged PRs in the window. Writes pr-list.json. Always fresh.
-# Used by the estimate path (newest N) — kept verbatim for contract stability.
+# List merged PRs in the window, newest first up to $max, in a single cheap page.
+# Writes pr-list.json. Always fresh. Used by the estimate path and by recent-mode
+# full fetch — recent never needs the whole window, so it skips list_window.
 list_prs() {
     local target="$1" since_date="$2" max="$3"
     gh pr list \
@@ -151,7 +159,7 @@ select_prs() {
 write_manifest() {
     local mode="$1"
     local pr_list="${WORK_DIR}/pr-list.json"
-    jq --arg mode "$mode" --arg since_window "$SINCE_WINDOW" '
+    jq --arg mode "$mode" --arg since_window "$SINCE_WINDOW" "${JQ_SPAN_WEEKS}"'
         . as $p
         | ($p | length) as $count
         | (if $count > 0 then ($p | map(.mergedAt) | min) else null end) as $earliest
@@ -161,9 +169,7 @@ write_manifest() {
             since_window: $since_window,
             earliest_merged: $earliest,
             latest_merged: $latest,
-            window_weeks: (if $count > 0
-                           then ((($latest | fromdateiso8601) - ($earliest | fromdateiso8601)) / 86400 / 7 | floor)
-                           else 0 end) }
+            window_weeks: span_weeks($earliest; $latest) }
     ' "$pr_list" > "${WORK_DIR}/manifest.json"
 }
 
@@ -196,7 +202,7 @@ estimate_costs() {
         earliest_merged=$(jq -r '[.[].mergedAt] | min' "$pr_list")
         latest_merged=$(jq -r '[.[].mergedAt] | max' "$pr_list")
         weeks=$(jq -n --arg e "$earliest_merged" --arg l "$latest_merged" \
-            '(($l | fromdateiso8601) - ($e | fromdateiso8601)) / 86400 / 7 | floor')
+            "${JQ_SPAN_WEEKS}"'span_weeks($e; $l)')
     fi
 
     local total_in_window
@@ -455,10 +461,16 @@ if [[ "$ESTIMATE_ONLY" == "1" ]]; then
     exit 0
 fi
 
-# Full fetch: list the whole window cheaply, then select up to MAX_PRS per the
-# coverage mode before paying for the per-PR comment/review fetches.
-list_window "$TARGET_REPO" "$SINCE_DATE"
-select_prs "$COVERAGE" "$MAX_PRS"
+# Full fetch. recent only needs the newest MAX_PRS, so it takes the cheap
+# single-page list_prs path (no over-fetch-then-discard). balanced/full need the
+# whole window listed (up to GitHub's search cap) so select_prs can sample across
+# the full span before paying for the per-PR comment/review fetches.
+if [[ "$COVERAGE" == "recent" ]]; then
+    list_prs "$TARGET_REPO" "$SINCE_DATE" "$MAX_PRS"
+else
+    list_window "$TARGET_REPO" "$SINCE_DATE"
+    select_prs "$COVERAGE" "$MAX_PRS"
+fi
 write_manifest "$COVERAGE"
 
 fetch_all_comments

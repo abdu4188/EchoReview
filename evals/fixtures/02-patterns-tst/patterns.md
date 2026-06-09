@@ -2,8 +2,9 @@
 
 Source: synthetic (eval fixture)
 Generated: 2026-06-01
-Flags: --since 3mo, --min-freq 3
-Mined: 0 PRs, 0 comments, 1 rule
+Requested:    --since 3mo, --min-freq 3, --limit 500, --coverage balanced
+Window mined: 2026-03-02 → 2026-05-30 (~12 weeks)
+Mined:        8 PRs, 14 comments, 1 rule
 
 ---
 
