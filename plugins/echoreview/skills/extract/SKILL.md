@@ -165,12 +165,14 @@ For each cluster with `freq >= MIN_FREQ`, synthesize one rule.
 
 1. **Category.** Use the cluster's category (`ECHO-ARC`, `ECHO-TST`, `ECHO-STY`, `ECHO-NAM`, `ECHO-API`, `ECHO-PRF`, `ECHO-DOC`, `ECHO-MISC`).
 2. **ID.** `[ECHO-<CAT>-<NNN>]` where `<NNN>` is zero-padded sequential within category for this run. Rule IDs renumber on every extraction — never pin downstream automation to them.
-3. **Severity.** Default by frequency:
-   - `freq >= 20` → `blocker`
-   - `freq 5–19` → `warning`
-   - `freq 2–4` → `suggestion`
-   - `freq 1` → `note`
-   Clamp to **`warning` minimum** if the rule's subject matter is security, correctness, or accessibility — judge by reading the cluster, not by the category bucket.
+3. **Severity.** Frequency measures how often the team raises a pattern, never how much it matters. Record `freq` on each rule, but it plays **no role** in severity. Assign severity from the category prior, then apply the doors:
+   - **Defaults.** `STY`, `NAM`, `DOC`, `MISC` → `suggestion`. `ARC`, `API`, `PRF`, `TST` → `warning`.
+   - **Up-clamp.** Clamp to **`warning` minimum** if the rule's subject matter is security, correctness, or accessibility — judge by reading the cluster, not by the category bucket.
+   - **Door up.** A default-`suggestion` category may rise to `warning` **only** if its backing quotes show the team blocks merges on it (e.g. "needs docs before merge"). Cite which quote justifies the rise in the rule's internal metadata.
+   - **Door down.** A default-`warning` category may fall to `suggestion` if its quotes are plainly hedged preference ("IMO", "nit", "my two cents", "perhaps").
+   - **`blocker`.** Reserved for ships-a-bug, a security hole, or a breaking change, by evidence in the quotes — no category reaches `blocker` by default.
+
+   **Hard guard.** If a rule's backing quotes are hedged (e.g. "Nits:", "my two cents", "perhaps", ":-)"), the rule cannot exceed `suggestion` — regardless of category or frequency.
 4. **`applies_to`.** Take the longest common path prefix across `member_indices`' `path` fields, suffixed with the uniform file extension if all members share one. Fall back to `"*"` if the cluster is heterogeneous or contains `kind: "review"` members (which have no path).
 5. **Title.** One line, imperative voice ("Prefer composition API over options API"). Do not include the pattern ID inside the title — only inside the `[...]` heading bracket.
 6. **DO / DON'T code block.** Language tag matches the dominant member-file type; fall back to `text`.
