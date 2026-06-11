@@ -152,6 +152,17 @@ Group comments by semantic theme. Each cluster is an internal object:
 }
 ```
 
+Category glosses — one category per cluster; when a cluster plausibly fits more than one, the **earlier in this list wins**:
+
+- `ARC` — architecture and design: module boundaries, coupling, dependency direction, data flow.
+- `TST` — tests: coverage, assertions, fixtures, flakiness.
+- `STY` — in-file idiom and readability: which language/framework construct to prefer, formatting, local code organization.
+- `NAM` — naming of identifiers, files, branches.
+- `API` — contracts the team's own code exposes: function signatures, error shapes, endpoint design, versioning.
+- `PRF` — performance: queries, allocation, hot paths, caching.
+- `DOC` — documentation: comments, docstrings, READMEs, changelogs.
+- `MISC` — fits none of the above.
+
 Constraints:
 - **No regex / no keyword grouping as preprocessing.** Cluster on meaning, not on string match.
 - Comments with the same theme but different wording belong in the same cluster — that voice variety is the signal Phase 3 wants.
@@ -165,18 +176,25 @@ For each cluster with `freq >= MIN_FREQ`, synthesize one rule.
 
 1. **Category.** Use the cluster's category (`ECHO-ARC`, `ECHO-TST`, `ECHO-STY`, `ECHO-NAM`, `ECHO-API`, `ECHO-PRF`, `ECHO-DOC`, `ECHO-MISC`).
 2. **ID.** `[ECHO-<CAT>-<NNN>]` where `<NNN>` is zero-padded sequential within category for this run. Rule IDs renumber on every extraction — never pin downstream automation to them.
-3. **Severity.** Frequency measures how often the team raises a pattern, never how much it matters. Record `freq` on each rule, but it plays **no role** in severity. Assign severity from the category prior, then apply the doors:
-   - **Defaults.** `STY`, `NAM`, `DOC`, `MISC` → `suggestion`. `ARC`, `API`, `PRF`, `TST` → `warning`.
-   - **Up-clamp.** Clamp to **`warning` minimum** if the rule's subject matter is security, correctness, or accessibility — judge by reading the cluster, not by the category bucket.
-   - **Door up.** A default-`suggestion` category may rise to `warning` **only** if its backing quotes show the team blocks merges on it (e.g. "needs docs before merge"). Cite which quote justifies the rise in the rule's internal metadata.
-   - **Door down.** A default-`warning` category may fall to `suggestion` if its quotes are plainly hedged preference ("IMO", "nit", "my two cents", "perhaps").
-   - **`blocker`.** Reserved for ships-a-bug, a security hole, or a breaking change, by evidence in the quotes — no category reaches `blocker` by default.
+3. **Severity.** Frequency measures how often the team raises a pattern, never how much it matters. Record `freq` on each rule, but it plays **no role** in severity. Severity answers one question — how strongly does the team enforce this pattern? — from the cluster's evidence, via the ordered steps below.
 
-   **Hard guard.** If a rule's backing quotes are hedged (e.g. "Nits:", "my two cents", "perhaps", ":-)"), the rule cannot exceed `suggestion` — regardless of category or frequency.
+   Two definitions the steps share:
+   - **Backing quotes** are the bodies of **all** the cluster's member comments (every entry in `member_indices`) — not the 1–3 quotes step 7 selects later.
+   - A backing quote is **hedged** when, read as a whole, it frames its request as optional personal preference. Markers like "IMO", "nit", "my two cents", "perhaps", "feel free to ignore", or a softening ":-)" are illustrations, not string matches — a comment that opens with a hedged aside but carries a firm demand ("Nits: typo. Separately, this query is injectable") is **not** hedged. The **cluster is hedged** when a majority of its backing quotes are hedged.
+
+   Apply these five moves **once each, top to bottom**. Each is a floor (raises severity to at least the named tier) or a ceiling (caps it); a later move stands even when it violates an earlier move's bound, no move re-fires, and nothing else changes severity. The result after the blocker grant is final.
+
+   - **Default by category.** `ARC`, `API`, `PRF`, `TST` → `warning`; every other category → `suggestion`.
+   - **Hedge ceiling.** If the cluster is hedged, cap severity at `suggestion`.
+   - **Merge-block floor.** Severity rises to at least `warning` **iff** at least one backing quote explicitly ties the pattern to merge approval (e.g. "please add docstrings for every exported helper before we merge this"). Condition met → the rise is mandatory. The justifying quote must be one of the rule's 1–3 verbatim quotes in step 7.
+   - **Subject-matter floor.** If the rule's subject matter is security, correctness, accessibility, or data integrity — judge by reading the cluster, not by the category bucket — severity rises to at least `warning`.
+   - **Blocker grant.** Severity becomes `blocker` **iff** at least one backing quote documents that the pattern shipped a bug, a security hole, or a breaking change. This is the only path to `blocker` — no category or floor reaches it otherwise.
+
+   The two floors and the blocker grant deliberately outrank the hedge ceiling: evidence that the team blocks merges, or that real damage shipped, beats hedged phrasing. Extraction never assigns `note` — the enum below has three values.
 4. **`applies_to`.** Take the longest common path prefix across `member_indices`' `path` fields, suffixed with the uniform file extension if all members share one. Fall back to `"*"` if the cluster is heterogeneous or contains `kind: "review"` members (which have no path).
 5. **Title.** One line, imperative voice ("Prefer composition API over options API"). Do not include the pattern ID inside the title — only inside the `[...]` heading bracket.
 6. **DO / DON'T code block.** Language tag matches the dominant member-file type; fall back to `text`.
-7. **Verbatim quotes (1–3).** **Prioritize characteristic quotes over the most-frequent ones.** Three identical "use translations" comments give weaker voice signal than three different phrasings of the same idea. If one phrasing dominates the cluster, pick one example of it plus 1–2 differently-worded members. Each quote line:
+7. **Verbatim quotes (1–3).** **Prioritize characteristic quotes over the most-frequent ones.** Three identical "use translations" comments give weaker voice signal than three different phrasings of the same idea. If one phrasing dominates the cluster, pick one example of it plus 1–2 differently-worded members. If step 3's merge-block floor fired, the justifying quote must be one of the selected quotes. Each quote line:
 
    ```
    > *"<verbatim quote>"* — @<handle>, PR #<number>
@@ -197,7 +215,7 @@ Mined <pr_count> PRs, <comment_count> comments, <cluster_count> clusters → <ru
 
 Rules to write:
   [ECHO-ARC-001] <title>  (freq: N, severity: warning)
-  [ECHO-TST-001] <title>  (freq: N, severity: blocker)
+  [ECHO-DOC-001] <title>  (freq: N, severity: suggestion)
   ...
 ```
 
@@ -276,7 +294,7 @@ exceed GitHub's search limit, so full coverage is not available.
 ```
 ### [ECHO-<CAT>-<NNN>] <one-line title>. (freq: <N>)
 
-severity: <blocker | warning | suggestion | note>
+severity: <blocker | warning | suggestion>
 applies_to: <glob pattern or "*">
 
 ```<lang>
@@ -316,7 +334,7 @@ All intermediates (`pr-list.json`, `window-list.json`, `estimate.json`, `manifes
 - Do not preprocess comments with regex / keyword grouping before clustering. The semantic clustering is the entire point.
 - Do not write `patterns.md` anywhere other than `./.echoreview/` in the current working directory.
 - Do not classify rules into tiers / `automated` vs `manual` / any non-uniform schema. Every extracted rule carries equal weight at application time.
-- Do not invent severity values beyond `blocker | warning | suggestion | note`.
+- Do not invent severity values beyond `blocker | warning | suggestion`. Extraction never emits `note` — that value survives only in `/echo-review`'s sort order, for patterns files generated before severity was evidence-based.
 - Do not include pattern IDs inside the rule title — only in the heading bracket.
 - Do not pick the most-frequent quote as the example. Pick characteristic quotes that show voice variety.
 - Do not exceed `--limit` PRs without the user explicitly raising it.
