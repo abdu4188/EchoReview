@@ -7,6 +7,12 @@ reasoning (the actual finding generation, voice matching, and
 severity calls); those are exercised by the end-to-end test described
 under "Manual verification" below.
 
+Multi-agent fan-out is part of that Claude-driven layer, so the harness
+pins `ECHOREVIEW_AGENTS=off` and validates the single-pass plumbing both
+modes share. The one exception is the `resolve-agents.sh` mode resolver
+itself, which is pure bash and is unit-tested directly (fixture
+`05-agents-resolution`).
+
 ## Run
 
 ```sh
@@ -66,6 +72,7 @@ Supported check types:
 | `summary_preserves_reply_chain` | at least one `in_reply_to_id: <n>` record present. |
 | `patterns_readable` | sibling `patterns.md` has ≥ `expected_rule_count` rules, each with ≥ 1 verbatim quote. |
 | `patterns_header` | sibling `patterns.md` contains every header token in `requires` (catches a header-field rename, e.g. `Requested:`/`Window mined:`). |
+| `agents_resolution` | `resolve-agents.sh` maps the check's `env` value + `args` flags to `expected_mode`/`expected_cap`/`expected_verify`. Drives the script directly; no WORK_DIR artifacts. |
 
 Comparisons are by substance, not byte-for-byte. The Claude-driven
 parts (comment voice, severity rationale text) are intentionally not

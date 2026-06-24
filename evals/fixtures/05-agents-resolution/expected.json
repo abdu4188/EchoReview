@@ -1,0 +1,19 @@
+{
+  "name": "Agent-mode resolution",
+  "description": "resolve-agents.sh maps ECHOREVIEW_AGENTS + flags to mode/cap/verify.",
+  "checks": [
+    { "type": "agents_resolution", "label": "unset-default", "expected_mode": "multi", "expected_cap": "auto", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "off", "env": "off", "expected_mode": "single", "expected_cap": "-", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "on", "env": "on", "expected_mode": "multi", "expected_cap": "auto", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "cap-3", "env": "3", "expected_mode": "multi", "expected_cap": "3", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "verify", "env": "verify", "expected_mode": "multi", "expected_cap": "auto", "expected_verify": "1" },
+    { "type": "agents_resolution", "label": "verify-cap", "env": "verify:2", "expected_mode": "multi", "expected_cap": "2", "expected_verify": "1" },
+    { "type": "agents_resolution", "label": "uppercase-off", "env": "OFF", "expected_mode": "single", "expected_cap": "-", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "garbage-defaults-multi", "env": "banana", "expected_mode": "multi", "expected_cap": "auto", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "flag-agents-overrides-off", "env": "off", "args": ["--agents"], "expected_mode": "multi", "expected_cap": "auto", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "flag-no-agents-overrides-on", "env": "on", "args": ["--no-agents"], "expected_mode": "single", "expected_cap": "-", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "flag-agents-n", "args": ["--agents=5"], "expected_mode": "multi", "expected_cap": "5", "expected_verify": "0" },
+    { "type": "agents_resolution", "label": "flag-verify", "args": ["--verify"], "expected_mode": "multi", "expected_cap": "auto", "expected_verify": "1" },
+    { "type": "agents_resolution", "label": "no-agents-clears-verify", "env": "verify:2", "args": ["--no-agents"], "expected_mode": "single", "expected_cap": "-", "expected_verify": "0" }
+  ]
+}

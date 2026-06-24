@@ -13,7 +13,7 @@ This skill walks five phases with two user checkpoints (the cost-estimate check 
 ## Inputs
 
 ```
-/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500] [--coverage balanced]
+/echo-extract [--repo owner/name] [--since 12mo] [--min-freq 3] [--limit 500] [--coverage balanced] [--agents N | --no-agents]
 ```
 
 - `--repo owner/name` — target repo to mine. If absent, derive from `git remote get-url origin` in the current working directory. The canonical case is running from a fork's checkout to mine the upstream.
@@ -25,6 +25,7 @@ This skill walks five phases with two user checkpoints (the cost-estimate check 
   - `balanced` — most-recent contiguous block plus a slice sampled across the rest of the window.
   - `full` — even coverage across the mined window. Note GitHub's search API caps any listing at 1000 results, so when a window holds more than 1000 merged PRs even `full` cannot reach past that cap.
   When the window fits within `--limit` (no truncation), all three behave identically — every PR is mined.
+- `--agents N` / `--no-agents` — toggle multi-agent extraction for this run; `--agents N` also caps concurrent subagents. Overrides the `ECHOREVIEW_AGENTS` setting (see Phase 0). Fan-out is the default.
 
 ## Phase 0 — Setup (silent, do this before Phase 1)
 
@@ -35,6 +36,7 @@ This skill walks five phases with two user checkpoints (the cost-estimate check 
    - Otherwise run `git remote get-url origin` from the current working directory and parse out `owner/name` (handle both `https://github.com/OWNER/REPO(.git)?` and `git@github.com:OWNER/REPO(.git)?` forms).
    - If neither yields a valid `owner/name`, tell the user to pass `--repo owner/name` and stop.
 4. Set `WORK_DIR=/tmp/echoreview-extract` and `mkdir -p` it.
+5. Resolve multi-agent mode: run `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-agents.sh` with any `--agents[=N]` or `--no-agents` tokens from the invocation, and read its `MODE<TAB>CAP<TAB>VERIFY` line into `AGENT_MODE` and `AGENT_CAP` (extraction ignores the verifier field). Fan-out is the default; a team opts out with `ECHOREVIEW_AGENTS=off` in their Claude `settings.json` `env` block (or the shell). `AGENT_MODE` selects which Phase 2–3 path runs below.
 
 ## Phase 1 — Fetch + filter
 
@@ -137,6 +139,8 @@ Filter rules applied by the script:
 Read the final line count from `comments.jsonl`. If 0, stop and tell the user the window or filters produced no signal — suggest widening `--since` or checking whether the target repo reviews via PR comments at all.
 
 ## Phase 2 — Cluster (in-memory, Claude reasoning only)
+
+**If `AGENT_MODE == multi`:** run Phases 2–3 via [`references/parallel-extract.md`](./references/parallel-extract.md) — it map-reduces clustering for large corpora and synthesizes rules in parallel, then returns you to Phase 4. **If `AGENT_MODE == single`** (the opt-out, and the fallback when subagents are unavailable), run Phases 2–3 below. Both paths produce the same rules, in the same order, with the same IDs — IDs are assigned only after every rule is collected and sorted.
 
 Read every line of `${WORK_DIR}/comments.jsonl`. Each line is one normalized comment with `{id, pr, author, kind, path, line, body, url, created_at, in_reply_to_id}`.
 
@@ -338,4 +342,4 @@ All intermediates (`pr-list.json`, `window-list.json`, `estimate.json`, `manifes
 - Do not include pattern IDs inside the rule title — only in the heading bracket.
 - Do not pick the most-frequent quote as the example. Pick characteristic quotes that show voice variety.
 - Do not exceed `--limit` PRs without the user explicitly raising it.
-- Do not add a `config.yml` or any other tunable file. Flags only in v0.1.
+- Do not add a `config.yml` or any other tunable file **inside the repo**. Runtime behavior comes from flags and from the `ECHOREVIEW_AGENTS` environment variable — which lives in the user's Claude config (`settings.json` `env` block) or shell, not a checked-in file. Don't introduce a repo-local config file.

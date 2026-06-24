@@ -1,0 +1,2 @@
+# Intentionally empty. This fixture's checks drive resolve-agents.sh directly
+# and need no review-script input artifacts.
