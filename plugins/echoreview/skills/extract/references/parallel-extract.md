@@ -32,10 +32,15 @@ Count the lines in `${WORK_DIR}/comments.jsonl`.
     chunk's path and its **global index offset** (chunk 0 → offset 0, chunk 1 →
     offset 200, …) so it reports global indices. Each returns cluster proposals.
   - **Reduce.** Collect all proposals and union same-theme clusters **across**
-    chunks into final clusters: merge their `member_indices`, recompute
-    `freq` as the merged count, and keep the earliest-winning category per the
-    Phase 2 gloss order. This reduce is your reasoning, not a script — no regex,
-    cluster on meaning.
+    chunks into final clusters: merge their `member_indices` and recompute
+    `freq` as the merged count. Then **re-derive each merged cluster's category
+    over its full unioned member set** — categorize the whole cluster exactly as
+    single-pass Phase 2 would, rather than inheriting either chunk's partial
+    label (each mapper saw only a subset, so its category is provisional). Use
+    the Phase 2 gloss order only to break a genuine tie in that whole-cluster
+    judgement. This keeps a fanned-out run in the same `ECHO-<CAT>` bucket — and
+    therefore the same IDs — as single-pass. This reduce is your reasoning, not a
+    script — no regex, cluster on meaning.
 
 Either way you end Step 1 with the same kind of cluster set single-pass Phase 2
 would hold: `{theme, category, member_indices, freq}`.

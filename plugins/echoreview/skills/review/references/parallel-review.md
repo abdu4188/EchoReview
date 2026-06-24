@@ -39,12 +39,15 @@ time; if it is `auto`, launch all applicable agents together.
 Give each agent a prompt with the **absolute paths** it needs:
 
 - `WORK_DIR=$WORK_DIR`, and within it `diff.patch` and `file-types.json`.
-- The relevant reference file(s) under
+- `comment-template.md` for **every** reviewer — single-pass routed every
+  comment through it, so each lens must honor its three guardrails (no
+  impersonation of named individuals, no harassment of the PR author, no
+  pattern IDs in the comment body) before emitting a finding.
+- The lens-specific reference file(s) under
   `${CLAUDE_PLUGIN_ROOT}/skills/review/references/`:
   `universal-best-practices.md` for the three floor reviewers,
   `reasoning-pass.md` + `reasoning-examples.md` for the reasoning reviewer,
-  `patterns.md` (the cwd `.echoreview/patterns.md`) + `comment-template.md` for
-  the patterns reviewer.
+  `patterns.md` (the cwd `.echoreview/patterns.md`) for the patterns reviewer.
 
 Each agent returns **only** a JSON findings array. Write each return value to its
 own file: `$WORK_DIR/findings-security.json`, `findings-correctness.json`,

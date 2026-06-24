@@ -14,8 +14,11 @@
 #   FLAG is any raw slash-command token the skill saw; only these matter:
 #     --no-agents     force single-pass for this run
 #     --agents        force multi-agent (keep any explicit cap)
-#     --agents=N      force multi-agent, cap N concurrent subagents
-#     --verify        add the adversarial verifier stage
+#     --agents N      force multi-agent, cap N concurrent subagents (space form)
+#     --agents=N      force multi-agent, cap N concurrent subagents (equals form)
+#     --agents 0      treated as "off" (single-pass), same as ECHOREVIEW_AGENTS=0
+#     --verify        add the adversarial verifier stage (takes effect only in
+#                     multi-agent mode; never flips mode on its own)
 #   Unrelated tokens are ignored, so the skill can forward argv as-is.
 #
 # Input:   $ECHOREVIEW_AGENTS (env) + flags (args). Flags win over env.
@@ -39,7 +42,9 @@ is_uint() { [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
 
 # --- 1. Seed from the env var (the durable setting). ---
 raw="${ECHOREVIEW_AGENTS:-}"
-val="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+# Lowercase and strip surrounding whitespace so " off " still opts out.
+# Valid values carry no internal whitespace, so deleting all of it is safe.
+val="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
 
 case "$val" in
     ""|on|1|true|auto|yes)
@@ -62,21 +67,45 @@ case "$val" in
 esac
 
 # --- 2. Per-run flags override the env, processed left to right. ---
-for tok in "$@"; do
+# Index-based so `--agents` can look ahead and consume a following bare
+# integer as the cap (the documented `--agents N` space form).
+args=("$@")
+i=0
+while (( i < ${#args[@]} )); do
+    tok="${args[i]}"
     case "$tok" in
         --no-agents)
             mode="single" ;;
         --agents)
-            mode="multi"; [[ "$cap" == "-" ]] && cap="auto" ;;
-        --agents=*)
             mode="multi"
+            next="${args[i+1]:-}"
+            if [[ "$next" == "0" ]]; then
+                mode="single"
+                echo "warning: --agents 0 means no agents; using single-pass." >&2
+                i=$((i + 1))
+            elif is_uint "$next"; then
+                cap="$next"
+                i=$((i + 1))
+            fi ;;
+        --agents=*)
             n="${tok#--agents=}"
-            if is_uint "$n"; then cap="$n"; else cap="auto"; fi ;;
+            if [[ "$n" == "0" ]]; then
+                mode="single"
+                echo "warning: --agents=0 means no agents; using single-pass." >&2
+            elif is_uint "$n"; then
+                mode="multi"; cap="$n"
+            else
+                mode="multi"; cap="auto"
+                echo "warning: --agents='${n}' is not a positive integer; using auto cap." >&2
+            fi ;;
         --verify)
-            mode="multi"; [[ "$cap" == "-" ]] && cap="auto"; verify="1" ;;
+            # Only adds the verifier stage; the normalize step drops it when
+            # mode is single, so --verify never re-enables multi on its own.
+            verify="1" ;;
         *)
             : ;;
     esac
+    i=$((i + 1))
 done
 
 # --- 3. Normalize: single-pass carries no cap and no verifier. ---

@@ -45,6 +45,10 @@ together (that voice variety is the signal later phases want). Rules:
   - `DOC` — documentation: comments, docstrings, READMEs, changelogs.
   - `MISC` — fits none of the above.
 
+  This category is **provisional**: you saw only one chunk, so the orchestrator
+  re-derives the final category over the whole unioned cluster during reduce.
+  Still assign your best single category — it seeds the merge.
+
 ## Output contract
 
 Your final message must be **exactly a JSON array and nothing else** — no prose,
