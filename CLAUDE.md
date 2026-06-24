@@ -82,8 +82,10 @@ chore: bump version to 0.2.0
 - **Shell scripts:** `#!/usr/bin/env bash`, `set -euo pipefail`, `shellcheck`-clean. Quote variables. Use `mktemp` for temp paths under `/tmp/echoreview-*/`.
 - **Repo layout:** match the existing structure exactly. Don't invent new top-level directories without discussion.
 - **Skills:** every `SKILL.md` has valid frontmatter — `name` and `description`. Skills are user-invocable by default; set `user-invocable: false` (note the hyphen) only to hide a skill from the `/` menu.
+- **Agents:** subagent role definitions live in `plugins/echoreview/agents/*.md` with frontmatter `name`, `description`, `tools`, `model`. They are read-only review/extract lenses the skills fan out to in multi-agent mode. They must never carry write/submit/`gh` tools — the PENDING-only and cwd-only-write guarantees depend on the orchestrating skill owning every side effect.
 - **References:** files under `skills/*/references/` are pure markdown — no executable side effects, no scripts.
 - **JSON:** `plugin.json`, `marketplace.json`, and eval fixtures must be valid JSON — no trailing commas, no comments.
+- **Runtime config:** the only persistent tunable is the `ECHOREVIEW_AGENTS` environment variable (multi-agent opt-out, default on). It lives in the user's Claude `settings.json` `env` block or shell — never a repo-local config file. Don't add `.echoreview/config.*` or any other checked-in config.
 - **Comments:** default to none. Add one only when the *why* is non-obvious (per global rules).
 
 ---

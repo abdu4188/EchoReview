@@ -21,6 +21,13 @@ FIXTURES_DIR="${SCRIPT_DIR}/fixtures"
 command -v jq >/dev/null || { echo "error: jq not found. brew install jq" >&2; exit 1; }
 command -v awk >/dev/null || { echo "error: awk not found" >&2; exit 1; }
 
+# The harness validates the single-pass bash-plumbing baseline; multi-agent
+# fan-out is Claude-driven reasoning, exercised manually, not here. Pin the
+# mode off so any script that consults it sees the single-pass default.
+# (check_agents_resolution overrides the var per-case to test the full
+# decision table of resolve-agents.sh.)
+export ECHOREVIEW_AGENTS=off
+
 # Globals consumed by lib.sh
 PASS_COUNT=0
 FAIL_COUNT=0

@@ -19,6 +19,10 @@ This skill walks four phases with two user checkpoints (after Phase 1 and before
 
 If the user gave no argument, ask for one. Don't guess.
 
+Optional flags: `--agents[=N]` / `--no-agents` toggle multi-agent review for this
+run and `--verify` adds the adversarial verifier stage; they override the
+`ECHOREVIEW_AGENTS` setting resolved in Phase 0.
+
 ## Phase 0 — Setup (silent, do this before Phase 1)
 
 1. Resolve the input to `OWNER`, `REPO`, `NUMBER`:
@@ -27,6 +31,7 @@ If the user gave no argument, ask for one. Don't guess.
    - Bare number: run `gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'` from the current working directory to fill in `OWNER/REPO`; if that fails (not in a repo), tell the user and stop.
 2. Verify `gh auth status` succeeds. If not, instruct the user to run `gh auth login` and stop.
 3. Set `WORK_DIR=/tmp/echoreview-${NUMBER}` and `mkdir -p` it.
+4. Resolve multi-agent mode: run `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-agents.sh` with any `--agents[=N]`, `--no-agents`, or `--verify` tokens from the invocation, and read its `MODE<TAB>CAP<TAB>VERIFY` line into `AGENT_MODE`, `AGENT_CAP`, `AGENT_VERIFY`. Fan-out is the default; a team opts out with `ECHOREVIEW_AGENTS=off` in their Claude `settings.json` `env` block (or the shell). `AGENT_MODE` selects which Phase 2–3 path runs below.
 
 ## Phase 1 — Context extract
 
@@ -59,6 +64,8 @@ Continue with the review? (y/N)
 
 ## Phase 2 — Pattern review
 
+**If `AGENT_MODE == multi`:** produce findings via the parallel reviewers in [`references/parallel-review.md`](./references/parallel-review.md). That flow replaces this Phase 2 and Phase 3, writes `$WORK_DIR/findings.json`, and returns you to Phase 4. **If `AGENT_MODE == single`** (the opt-out, and the fallback when subagents are unavailable), run Phases 2–3 below as one pass. Both paths produce the same `findings.json`, so Phase 4 is identical.
+
 1. Load [`references/universal-best-practices.md`](./references/universal-best-practices.md).
 2. From the user's current working directory, check whether `.echoreview/patterns.md` exists. If so, load it. If not, proceed with the universal floor only — this is the expected v0.1 path until `echo-extract` ships.
 3. Read `$WORK_DIR/diff.patch`.
@@ -72,6 +79,8 @@ Continue with the review? (y/N)
 5. Write the structured findings to `$WORK_DIR/findings.json` as a JSON array.
 
 ## Phase 3 — Reasoning pass
+
+(Single-pass path. In multi-agent mode this lens runs in parallel as the `echo-reasoning-reviewer` agent per [`references/parallel-review.md`](./references/parallel-review.md), under the same skip gate described next.)
 
 Check the skip conditions from [`references/reasoning-pass.md`](./references/reasoning-pass.md). If any matches, **skip this phase entirely** — do not surface any reasoning-pass findings and do not penalize the PR for being lockfile-only / docs-only / generated / a pure version bump.
 

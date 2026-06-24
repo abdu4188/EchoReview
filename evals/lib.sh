@@ -17,6 +17,7 @@
 #   FIXTURE_NAME, FIXTURE_ERRORS, WORK_DIR
 
 REVIEW_SCRIPTS="${REPO_ROOT}/plugins/echoreview/skills/review/scripts"
+PLUGIN_SCRIPTS="${REPO_ROOT}/plugins/echoreview/scripts"
 
 # fail_check MESSAGE — record a check failure for the current fixture.
 fail_check() {
@@ -243,6 +244,106 @@ check_patterns_header() {
     return 0
 }
 
+# check_agents_resolution — assert resolve-agents.sh maps a given
+# ECHOREVIEW_AGENTS value plus flag tokens to the expected mode/cap/verify.
+# Unlike the other checks this drives a plugin script directly instead of
+# inspecting WORK_DIR, so it carries its own inputs in the check JSON:
+#   { "label", "env"?, "args"?: [..], "expected_mode", "expected_cap",
+#     "expected_verify" }. Omit "env" (or set it null) to test the unset case.
+check_agents_resolution() {
+    local check_json="$1"
+    local label em ec ev has_env expected actual
+    label=$(jq -r '.label // "agents_resolution"' <<<"$check_json")
+    em=$(jq -r '.expected_mode' <<<"$check_json")
+    ec=$(jq -r '.expected_cap' <<<"$check_json")
+    ev=$(jq -r '.expected_verify' <<<"$check_json")
+
+    local -a flags=()
+    while IFS= read -r tok; do
+        flags+=("$tok")
+    done < <(jq -r '(.args // [])[]' <<<"$check_json")
+
+    has_env=$(jq -r 'if has("env") and .env != null then "yes" else "no" end' \
+        <<<"$check_json")
+    if [[ "$has_env" == "yes" ]]; then
+        local env_val
+        env_val=$(jq -r '.env' <<<"$check_json")
+        actual=$(ECHOREVIEW_AGENTS="$env_val" \
+            "${PLUGIN_SCRIPTS}/resolve-agents.sh" ${flags[@]+"${flags[@]}"} \
+            2>/dev/null) || true
+    else
+        actual=$(env -u ECHOREVIEW_AGENTS \
+            "${PLUGIN_SCRIPTS}/resolve-agents.sh" ${flags[@]+"${flags[@]}"} \
+            2>/dev/null) || true
+    fi
+
+    printf -v expected '%s\t%s\t%s' "$em" "$ec" "$ev"
+    if [[ "$actual" != "$expected" ]]; then
+        fail_check "agents_resolution(${label}): expected '$(printf '%s' "$expected" | tr '\t' '|')', got '$(printf '%s' "$actual" | tr '\t' '|')'"
+        return 1
+    fi
+    return 0
+}
+
+# check_merge_findings — drive merge-findings.sh directly against inline
+# findings arrays and assert the merged result. Like check_agents_resolution
+# it carries its own inputs in the check JSON and captures the script's stdout
+# instead of inspecting WORK_DIR artifacts:
+#   { "label", "inputs": [ [finding, ...], ... ],
+#     "expected_count"?: <int>,
+#     "expected_comments"?: [ <.comment in result order> ] }
+# Each entry of "inputs" becomes one findings-N.json argument, so a non-array
+# entry exercises the skip-the-bad-file path. The script must exit 0 and emit a
+# JSON array (the crash-regression guard) regardless of input shape.
+check_merge_findings() {
+    local check_json="$1"
+    local label count idx
+    label=$(jq -r '.label // "merge_findings"' <<<"$check_json")
+
+    # Materialize each input as its own findings-N.json argument file.
+    local -a files=()
+    count=$(jq '.inputs | length' <<<"$check_json")
+    idx=0
+    while (( idx < count )); do
+        local fpath="${WORK_DIR}/merge-input-${idx}.json"
+        jq -c ".inputs[$idx]" <<<"$check_json" > "$fpath"
+        files+=("$fpath")
+        idx=$((idx + 1))
+    done
+
+    local actual rc=0
+    actual=$("${REVIEW_SCRIPTS}/merge-findings.sh" "${files[@]}" 2>/dev/null) || rc=$?
+    if (( rc != 0 )); then
+        fail_check "merge_findings(${label}): script exited ${rc}, expected 0"
+        return 1
+    fi
+    if ! jq -e 'type == "array"' <<<"$actual" >/dev/null 2>&1; then
+        fail_check "merge_findings(${label}): output is not a JSON array"
+        return 1
+    fi
+
+    if jq -e 'has("expected_count")' <<<"$check_json" >/dev/null; then
+        local want got
+        want=$(jq -r '.expected_count' <<<"$check_json")
+        got=$(jq 'length' <<<"$actual")
+        if [[ "$got" != "$want" ]]; then
+            fail_check "merge_findings(${label}): expected ${want} findings, got ${got}"
+            return 1
+        fi
+    fi
+
+    if jq -e 'has("expected_comments")' <<<"$check_json" >/dev/null; then
+        local want got
+        want=$(jq -c '.expected_comments' <<<"$check_json")
+        got=$(jq -c '[.[].comment]' <<<"$actual")
+        if [[ "$got" != "$want" ]]; then
+            fail_check "merge_findings(${label}): expected comment order ${want}, got ${got}"
+            return 1
+        fi
+    fi
+    return 0
+}
+
 # dispatch_check CHECK_JSON — route to the right check function by .type.
 dispatch_check() {
     local check_json="$1"
@@ -259,6 +360,8 @@ dispatch_check() {
         summary_preserves_reply_chain)   check_summary_preserves_reply_chain ;;
         patterns_readable)               check_patterns_readable "$check_json" ;;
         patterns_header)                 check_patterns_header "$check_json" ;;
+        agents_resolution)               check_agents_resolution "$check_json" ;;
+        merge_findings)                  check_merge_findings "$check_json" ;;
         *)
             fail_check "unknown check type: ${check_type}"
             return 1

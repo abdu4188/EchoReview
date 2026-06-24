@@ -90,6 +90,27 @@ The review skill walks four phases with two checkpoints:
 You always click **Submit review** on GitHub yourself. EchoReview
 never finalizes a review for you.
 
+### Multi-agent mode
+
+By default, EchoReview fans the review out across parallel subagents — one per
+lens (security, correctness, quality, your team patterns, and the reasoning
+pass) — and merges their findings before the submit checkpoint. Extraction
+likewise synthesizes rules in parallel. It's broader and faster, and it uses
+more of your Claude Code subscription per run.
+
+To run the original single pass instead, set the env var in your Claude
+`settings.json` `env` block (or your shell):
+
+```json
+{ "env": { "ECHOREVIEW_AGENTS": "off" } }
+```
+
+Per run you can override with `--no-agents` (force single pass), `--agents N`
+(cap concurrent subagents), or `--verify` (add an adversarial check that drops
+weak findings). If your session can't spawn subagents, EchoReview falls back to
+the single pass automatically. Either way the output is the same PENDING review,
+and the two checkpoints still pause for you.
+
 To learn your team's patterns once before reviewing:
 
 ```sh

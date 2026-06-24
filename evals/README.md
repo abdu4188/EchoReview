@@ -7,6 +7,13 @@ reasoning (the actual finding generation, voice matching, and
 severity calls); those are exercised by the end-to-end test described
 under "Manual verification" below.
 
+Multi-agent fan-out is part of that Claude-driven layer, so the harness
+pins `ECHOREVIEW_AGENTS=off` and validates the single-pass plumbing both
+modes share. Two multi-agent helpers are pure bash, though, and are
+unit-tested directly: the `resolve-agents.sh` mode resolver (fixture
+`05-agents-resolution`) and the `merge-findings.sh` deterministic merge
+(fixture `06-merge-findings`).
+
 ## Run
 
 ```sh
@@ -66,6 +73,8 @@ Supported check types:
 | `summary_preserves_reply_chain` | at least one `in_reply_to_id: <n>` record present. |
 | `patterns_readable` | sibling `patterns.md` has ≥ `expected_rule_count` rules, each with ≥ 1 verbatim quote. |
 | `patterns_header` | sibling `patterns.md` contains every header token in `requires` (catches a header-field rename, e.g. `Requested:`/`Window mined:`). |
+| `agents_resolution` | `resolve-agents.sh` maps the check's `env` value + `args` flags to `expected_mode`/`expected_cap`/`expected_verify`. Drives the script directly; no WORK_DIR artifacts. |
+| `merge_findings` | `merge-findings.sh` merges the check's inline `inputs` arrays into `expected_count`/`expected_comments` (result order), never crashing on off-contract input. Drives the script directly; no WORK_DIR artifacts. |
 
 Comparisons are by substance, not byte-for-byte. The Claude-driven
 parts (comment voice, severity rationale text) are intentionally not

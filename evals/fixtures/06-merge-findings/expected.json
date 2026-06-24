@@ -1,0 +1,107 @@
+{
+  "name": "Merge findings",
+  "description": "merge-findings.sh concatenates, applies the reasoning floor, and sorts — without crashing on off-contract input.",
+  "checks": [
+    {
+      "type": "merge_findings",
+      "label": "null-severity-ranked-last-no-crash",
+      "inputs": [
+        [
+          { "file": "b.ts", "line": 3, "source": "universal", "severity": "blocker", "comment": "blk" },
+          { "file": "c.ts", "source": "universal", "comment": "nullsev" }
+        ]
+      ],
+      "expected_count": 2,
+      "expected_comments": ["blk", "nullsev"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "non-array-input-skipped-others-survive",
+      "inputs": [
+        [ { "file": "a.ts", "line": 1, "source": "universal", "severity": "warning", "comment": "keep" } ],
+        { "not": "an array" }
+      ],
+      "expected_count": 1,
+      "expected_comments": ["keep"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "all-inputs-bad-yields-empty-array",
+      "inputs": [
+        { "not": "an array" },
+        "scalar"
+      ],
+      "expected_count": 0,
+      "expected_comments": []
+    },
+    {
+      "type": "merge_findings",
+      "label": "non-object-array-elements-skipped",
+      "inputs": [
+        ["just", "strings"],
+        [ { "file": "a.ts", "line": 1, "source": "universal", "severity": "warning", "comment": "keep" } ]
+      ],
+      "expected_count": 1,
+      "expected_comments": ["keep"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "string-confidence-reasoning-dropped",
+      "inputs": [
+        [
+          { "file": "a.ts", "line": 1, "source": "reasoning", "confidence": "45", "severity": "warning", "comment": "strconf" },
+          { "file": "a.ts", "line": 2, "source": "universal", "severity": "warning", "comment": "keep" }
+        ]
+      ],
+      "expected_count": 1,
+      "expected_comments": ["keep"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "missing-confidence-reasoning-dropped",
+      "inputs": [
+        [
+          { "file": "a.ts", "line": 1, "source": "reasoning", "severity": "blocker", "comment": "noconf" },
+          { "file": "a.ts", "line": 2, "source": "universal", "severity": "note", "comment": "keep" }
+        ]
+      ],
+      "expected_count": 1,
+      "expected_comments": ["keep"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "high-confidence-reasoning-kept",
+      "inputs": [
+        [ { "file": "a.ts", "line": 1, "source": "reasoning", "confidence": 90, "severity": "blocker", "comment": "goodreason" } ]
+      ],
+      "expected_count": 1,
+      "expected_comments": ["goodreason"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "string-line-sorts-numerically",
+      "inputs": [
+        [
+          { "file": "b.ts", "line": "12", "source": "universal", "severity": "warning", "comment": "line12" },
+          { "file": "b.ts", "line": 3, "source": "universal", "severity": "warning", "comment": "line3" }
+        ]
+      ],
+      "expected_count": 2,
+      "expected_comments": ["line3", "line12"]
+    },
+    {
+      "type": "merge_findings",
+      "label": "severity-ordering",
+      "inputs": [
+        [
+          { "file": "a.ts", "line": 1, "source": "universal", "severity": "note", "comment": "n" },
+          { "file": "a.ts", "line": 1, "source": "universal", "severity": "blocker", "comment": "b" },
+          { "file": "a.ts", "line": 1, "source": "universal", "severity": "suggestion", "comment": "s" },
+          { "file": "a.ts", "line": 1, "source": "universal", "severity": "warning", "comment": "w" }
+        ]
+      ],
+      "expected_count": 4,
+      "expected_comments": ["b", "w", "s", "n"]
+    }
+  ]
+}
